@@ -38,10 +38,10 @@ struct cpu*
 mycpu(void)
 {
   int apicid, i;
-  
+
   if(readeflags()&FL_IF)
     panic("mycpu called with interrupts enabled\n");
-  
+
   apicid = lapicid();
   // APIC IDs are not guaranteed to be contiguous. Maybe we should have
   // a reverse map, or reserve a register to store &cpus[i].
@@ -124,7 +124,7 @@ userinit(void)
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
   p = allocproc();
-  
+
   initproc = p;
   if((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
@@ -221,11 +221,71 @@ fork(void)
   return pid;
 }
 
+int clone(void *stack)
+{
+  int i,pid;
+  uint stacksize;
+  struct proc *np;
+  struct proc *pp;
+  struct proc *curproc = myproc();
+
+  //Allocate process
+  if((np = allocproc()) == 0) {
+    return -1;
+  }
+  if(((uint)stack % PGSIZE) != 0 || (uint)stack == 0) {
+    return -1;
+  }
+
+  //Use the same address space
+  np->pgdir = curproc->pgdir;
+  np->isthread = 1;
+  np->sz = curproc->sz;
+  np->parent = curproc;
+  *np->tf = *curproc->tf;
+
+  pp = curproc;
+  while (pp->isthread)
+    pp = pp->parent;
+  np->parent = pp;
+
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
+
+  //Use the same file discriptors as parent
+  for(i = 0; i < NOFILE; i++)
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+  np->cwd = idup(curproc->cwd);
+
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+  // Copy stack
+  acquire(&ptable.lock); // lock required because of stack read
+  stacksize = (PGSIZE - ((uint)curproc->tf->esp % PGSIZE));
+  np->tf->esp = (uint)stack + PGSIZE - stacksize;
+  np->tf->ebp = np->tf->esp + (curproc->tf->ebp - curproc->tf->esp);
+  if(copyout(np->pgdir,np->tf->esp,(void*)curproc->tf->esp,stacksize)<0){
+    cprintf("stack copy fail\n");
+    return -1;
+  }
+  //release(&ptable.lock);
+
+  pid = np->pid;
+
+  // lock to force the compiler to emit the np->state write last.
+  //acquire(&ptable.lock);
+  np->state = RUNNABLE;
+  release(&ptable.lock);
+
+  return pid;
+}
+
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait() to find out it exited.
 void
-exit(void)
+exit()
 {
   struct proc *curproc = myproc();
   struct proc *p;
@@ -270,12 +330,12 @@ exit(void)
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int
-wait(void)
+wait()
 {
   struct proc *p;
   int havekids, pid;
   struct proc *curproc = myproc();
-  
+
   acquire(&ptable.lock);
   for(;;){
     // Scan through table looking for exited children.
@@ -289,7 +349,9 @@ wait(void)
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        freevm(p->pgdir);
+        if (!p->isthread) {
+            freevm(p->pgdir); // free pgdir only if it is not a thread
+        }
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
@@ -325,7 +387,7 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -418,7 +480,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   if(p == 0)
     panic("sleep");
 
