@@ -252,7 +252,6 @@ int clone(void *stack)
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
 
-  //Use the same file discriptors as parent
   for(i = 0; i < NOFILE; i++)
     if(curproc->ofile[i])
       np->ofile[i] = filedup(curproc->ofile[i]);
@@ -260,8 +259,7 @@ int clone(void *stack)
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
-  // Copy stack
-  acquire(&ptable.lock); // lock required because of stack read
+  acquire(&ptable.lock); 
   stacksize = (PGSIZE - ((uint)curproc->tf->esp % PGSIZE));
   np->tf->esp = (uint)stack + PGSIZE - stacksize;
   np->tf->ebp = np->tf->esp + (curproc->tf->ebp - curproc->tf->esp);
@@ -269,12 +267,9 @@ int clone(void *stack)
     cprintf("stack copy fail\n");
     return -1;
   }
-  //release(&ptable.lock);
 
   pid = np->pid;
 
-  // lock to force the compiler to emit the np->state write last.
-  //acquire(&ptable.lock);
   np->state = RUNNABLE;
   release(&ptable.lock);
 
@@ -350,7 +345,7 @@ wait()
         kfree(p->kstack);
         p->kstack = 0;
         if (!p->isthread) {
-            freevm(p->pgdir); // free pgdir only if it is not a thread
+            freevm(p->pgdir); 
         }
         p->pid = 0;
         p->parent = 0;

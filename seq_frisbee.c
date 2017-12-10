@@ -2,12 +2,9 @@
 #include "stat.h"
 #include "user.h"
 
-struct{
-  seqloc lock;
-  volatile int next; // who is to run next
-  volatile int pass;
-}frisbee;
-
+seqloc lock;
+volatile int next; // who is to run next
+volatile int pass;
 int num_of_thread, num_of_pass;
 volatile int f = 0;
 
@@ -16,20 +13,20 @@ void player(void *arg){
   int r;
   unsigned long seq0, seq1;
   while(!f);
-  while(frisbee.pass < num_of_pass){
+  while(pass < num_of_pass){
     do{
-      seq0 = frisbee.lock.seq;
-      r = frisbee.next;
-      seq1 = frisbee.lock.seq;
+      seq0 = lock.seq;
+      r = next;
+      seq1 = lock.seq;
     }while(seq0 != seq1 || seq0 & 1);
 
-    if (i == r && frisbee.pass < num_of_pass) {
-          seqlock_acquire(&frisbee.lock);
-          frisbee.pass ++;
-          frisbee.next ++;
-          frisbee.next = frisbee.next % num_of_thread;
-          printf(1, "Pass number no: %d, Thread %d is passing the token to thread %d\n", frisbee.pass, i, frisbee.next);
-          seqlock_release(&frisbee.lock);
+    if (i == r && pass < num_of_pass) {
+          seqlock_acquire(&lock);
+          pass ++;
+          next ++;
+          next = next % num_of_thread;
+          printf(1, "Pass number no: %d, Thread %d is passing the token to thread %d\n", pass, i, next);
+          seqlock_release(&lock);
       }
   }
   exit();
@@ -44,9 +41,9 @@ int main(int argc, char const *argv[]){
   }
   num_of_thread = atoi(argv[1]);
   num_of_pass = atoi(argv[2]);
-  seqlock_init(&frisbee.lock);
-  frisbee.next = 0;
-  frisbee.pass = 0;
+  seqlock_init(&lock);
+  next = 0;
+  pass = 0;
 
   for (i = 0; i < num_of_thread; i++) {
         thread_create(player, (void *)&i);

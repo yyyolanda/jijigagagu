@@ -9,7 +9,7 @@ int thread_create(void(*start_routine)(void *), void *arg){
   void *stack;
   int tid;
 
-  stack = malloc(2 * PGSIZE); // set up the new thread stack
+  stack = malloc(2 * PGSIZE); 
 
   if ((uint)stack % PGSIZE){
     stack = stack + (PGSIZE - ((uint)stack % PGSIZE));
@@ -47,10 +47,9 @@ void arrlock_init(arrloc *lock){
 
 void arrlock_acquire(arrloc *lock, int i){
     while(xchg(&lock->is_available[i],0) != 1);
-    //while(&lock->can_serve[me] == 0);
 }
 
-void arrlock_release(arrloc *lock, int i, int num){ //thread in use
+void arrlock_release(arrloc *lock, int i, int num){ 
     xchg(&lock->is_available[i],0);
     xchg(&lock->is_available[(i+1)%num],1);
 }

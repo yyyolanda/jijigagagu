@@ -2,27 +2,24 @@
 #include "stat.h"
 #include "user.h"
 
-struct{
-  arrloc lock;
-  volatile int next; // who is to run next
-  volatile int pass;
-}frisbee;
-
+arrloc lock;
+volatile int next; // who is to run next
+volatile int pass;
 int num_of_thread, num_of_pass;
 volatile int f = 0;
 
 void player(void *arg){
   int i = *(int *)arg;
   while(!f);
-  while(frisbee.pass < num_of_pass){
-    arrlock_acquire(&frisbee.lock, i);
-    if(frisbee.pass >= num_of_pass) {
-        arrlock_release(&frisbee.lock,i,num_of_thread);
+  while(pass < num_of_pass){
+    arrlock_acquire(&lock, i);
+    if(pass >= num_of_pass) {
+        arrlock_release(&lock,i,num_of_thread);
 	break;
     }
-    frisbee.pass ++;
-    printf(1, "Pass number no: %d, Thread %d is passing the token to thread %d\n",frisbee.pass, i, i+1);
-    arrlock_release(&frisbee.lock,i,num_of_thread);
+    pass ++;
+    printf(1, "Pass number no: %d, Thread %d is passing the token to thread %d\n",pass, i, (i+1)%num_of_thread);
+    arrlock_release(&lock,i,num_of_thread);
   }
   exit();
 }
@@ -37,8 +34,8 @@ int main(int argc, char const *argv[])
   }
   num_of_thread = atoi(argv[1]);
   num_of_pass = atoi(argv[2]);
-  arrlock_init(&frisbee.lock);
-  frisbee.pass = 0;
+  arrlock_init(&lock);
+  pass = 0;
 
   for (i = 0; i < num_of_thread; i++) {
         thread_create(player, (void *)&i);
